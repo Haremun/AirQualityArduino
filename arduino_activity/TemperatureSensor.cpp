@@ -4,7 +4,7 @@
 
 byte addr[8];
 
-int digitalPin = 10;
+int digitalPin = 7;
 float temperatureCelcius = 0;
 
 TemperatureSensor::TemperatureSensor(int _digitalPin){

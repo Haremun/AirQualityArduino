@@ -4,7 +4,7 @@
 WifiConnection wiFiConn;
 WifiSender sender;
 
-char myArray[50];
+char myArray[60];
 int i = 0;
 int length = 0;
 bool sendMsg = false;
@@ -20,13 +20,16 @@ void setup() {
   Serial.begin(9600);  
 
   memset(myArray, 0, sizeof(myArray));
-  
+
+  /*if(wiFiConn.isConnected()){
+       sender.sendDataToServer(wiFiConn.getWifiClient(), "temperature=12&airquality=19&dust=05&");
+      }*/
 }
 
 void loop() {
   
   if(Serial.available() > 0){
-    
+    Serial.print("Nope");
     while(!sendMsg){
       char letter = Serial.read();
           
@@ -53,7 +56,10 @@ void loop() {
       i = 0;
       length = 0;
       memset(myArray, 0, sizeof(myArray));
-    }    
-  }  
-
+    }        
+  }
+  /*if(wiFiConn.isConnected()){
+       sender.sendDataToServer(wiFiConn.getWifiClient(), "temperature=13&airquality=19&dust=05&");
+    }*/
+    delay(2000);
 }

@@ -1,73 +1,50 @@
 #include "DustSensor.h"
 
-#ifdef USE_AVG
-#define N 100
-static unsigned long VoRawTotal = 0;
-static int VoRawCount = 0;
-#endif // USE_AVG
 
-float dustDensity;
+DustSensor::DustSensor(SoftwareSerial * serial){
+    dustSerial = serial;
+}
 
-int sharpLEDPin = 7;
-int sharpVoPin = A0;
-
-// Set the typical output voltage in Volts when there is zero dust. 
-const float Voc = 0.02;
-
-// Use the typical sensitivity in units of V per 100ug/m3.
-const float K = 0.5;
-
-DustSensor::DustSensor(int voPin, int ledPin){
-  sharpVoPin = voPin;
-  sharpLEDPin = ledPin;
-
-  pinMode(sharpLEDPin, OUTPUT);
+void DustSensor::setupSensor(){
+  dustSerial->begin(9600);
 }
 
 void DustSensor::start(){
-  digitalWrite(sharpLEDPin, LOW);
-
-  // Wait 0.28ms before taking a reading of the output voltage as per spec.
-  delayMicroseconds(280);
-  //delayMicroseconds(450);
-
-  // Record the output voltage. This operation takes around 100 microseconds.
-  int VoRaw = analogRead(sharpVoPin);
-  // Turn the dust sensor LED off by setting digital pin HIGH.
-  digitalWrite(sharpLEDPin, HIGH);
-  
-  delayMicroseconds(9620);
-
-  float Vo = VoRaw;
-  #ifdef USE_AVG
-  bool avgDone = false;
-  while(!avgDone){
-    VoRawTotal += VoRaw;
-    VoRawCount++;
-    if ( VoRawCount >= N ) {
-      Vo = 1.0 * VoRawTotal / N;
-      Serial.print(Vo);
-      VoRawCount = 0;
-      VoRawTotal = 0;
-    } else {
-      avgDone = true;
+  uint8_t mData = 0;
+  uint8_t mPkt[10] = {0};
+  uint8_t mCheck = 0;
+  while( dustSerial->available() > 0 ) {
+    
+    for( int i=0; i<10; ++i ) {
+      mPkt[i] = dustSerial->read();
     }
-  }  
-  #endif // USE_AVG
-
-  Vo = Vo / 1024.0 * 5.0;
-
-  float dV = Vo - Voc;
-  if ( dV < 0 ) {
-    dV = 0;
-    //Voc = Vo;
+    if( 0xC0 == mPkt[1] ) {
+      uint8_t sum = 0;
+      for( int i=2; i<=7; ++i ) {
+        sum += mPkt[i];
+      }
+      if( sum == mPkt[8] ) {
+        uint8_t pm25Low   = mPkt[2];
+        uint8_t pm25High  = mPkt[3];
+        uint8_t pm10Low   = mPkt[4];
+        uint8_t pm10High  = mPkt[5];
+  
+        Pm25 = ((pm25High * 256.0) + pm25Low) / 10.0;
+        Pm10 = ((pm10High * 256.0) + pm10Low) / 10.0;
+        
+      }
+    }
+    
+    dustSerial->flush();
   }
-  dustDensity = dV / K * 100.0;
 }
 
+double DustSensor::getPm25(){  
+  return Pm25;
+}
 
-float DustSensor::getOutput(){  
-  return dustDensity;
+double DustSensor::getPm10(){  
+  return Pm10;
 }
 
 DustSensor::~DustSensor(){}

@@ -1,8 +1,11 @@
 #include "WifiConnection.h"
 #include <ESP8266WiFi.h>
 
-const char* ssid = "Huawei";
-const char* password = "kotylizomaslo";
+//const char* ssid = "Huawei";
+//const char* password = "kotylizomaslo";
+
+const char* ssid = "TP-LINK_9752";
+const char* password = "26461984";
 
 WiFiClient wifiClient;
 
