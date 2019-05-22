@@ -61,7 +61,7 @@ void TemperatureSensor::start(){
   //fahrenheit = celsius * 1.8 + 32.0;
     
   } else {
-    Serial.println("Temperature sensor error");
+    //Serial.println("Temperature sensor error");
   }
 }
 
