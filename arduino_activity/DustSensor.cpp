@@ -57,7 +57,6 @@ void DustSensor::sensorRead(){
   uint8_t mPkt[10] = {0};
   uint8_t mCheck = 0;
   while( dustSerial->available() > 0 ) {
-    
     for( int i=0; i<10; ++i ) {
       mPkt[i] = dustSerial->read();
     }
@@ -74,10 +73,14 @@ void DustSensor::sensorRead(){
   
         Pm25 = ((pm25High * 256.0) + pm25Low) / 10.0;
         Pm10 = ((pm10High * 256.0) + pm10Low) / 10.0;
+        Serial.println("Dust sensor: ");
+        Serial.print(Pm25);
+        Serial.print(" ");
+        Serial.println(Pm10);
         
       }
     } else {
-      Serial.println("Error");
+      Serial.println("Dust sensor error, no 0xC0");
     }
     
     dustSerial->flush();

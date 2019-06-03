@@ -1,7 +1,21 @@
 #include <SoftwareSerial.h>
 #include "DustSensor.h"
 #include "TemperatureSensor.h"
+#include "EspConnection.h"
 #include <EEPROM.h>
+
+//Arrays for data
+char msg[100];
+char sensorValue[10];
+char response[100];
+char settingsMessage[100];
+
+const char temp[] = "temperature=";
+const char airq[] = "airquality=";
+const char dust[] = "dust25=";
+const char dust10[] = "dust10=";
+const char battery[] ="battery=";
+const char test[] = "temperature=11.00&airquality=11.00&battery=4.0&dust25=11.00&dust10=11.00$";
 
 const double timeInterval[] = {
   0.5,
@@ -33,74 +47,56 @@ const short analogPinAirQ = 0;
 const short analogPinBattery = 1;
 
 const short loopDelay = 10; //miliseconds
-short turnOnDelay = 1 * 60; //delay in seconds
+short turnOnDelay = 10; //delay in seconds
 short sensorsReadDelay = 1 * 60; //delay in seconds
 //short loopCount = sensorsReadDelay * 100;
 short loopCount = 0;
 
 bool bluetoothON = false;
 
-const char temp[] = "temperature=";
-const char airq[] = "airquality=";
-const char dust[] = "dust25=";
-const char dust10[] = "dust10=";
-const char battery[] ="battery=";
-const char test[] = "temperature=11.00&airquality=11.00&battery=4.0&dust25=11.00&dust10=11.00$";
-
 //Declare Serials
 SoftwareSerial espSerial(espSerialRX, espSerialTX);  //RX,TX
-SoftwareSerial dustSerial(dustSerialRX, dustSerialTX);  //RX,TX
+SoftwareSerial dustSerial(dustSerialRX, dustSerialTX);
 SoftwareSerial bluetoothSerial(bletoothSerialRX, bletoothSerialTX);
-
-//Arrays for data
-char msg[100];
-char sensorValue[10];
-char response[100];
-char settingsMessage[100];
 
 //Declare sensors
 DustSensor dustSensor(&dustSerial);
 TemperatureSensor temperatureSensor(pinTemperatureSensor);
 
+EspConnection espConnection(&espSerial, pinEspSwitch);
+
 void setup() {
 
-  //analogReference(EXTERNAL);
-  
-  delay(1000);
   espSerial.begin(9600);  
-  bluetoothSerial.begin(9600);
-  Serial.begin(9600);
+  bluetoothSerial.begin(9600);  
   dustSensor.setupSensor();
+  Serial.begin(9600);
   delay(100); 
 
   byte in = EEPROM.read(0);
-  sensorsReadDelay = timeInterval[(int) in] * 60;
+  //sensorsReadDelay = timeInterval[(int) in] * 60;
+  sensorsReadDelay = 15;
     
 
   pinMode(pinAirQTrans, OUTPUT);
-  //pinMode(pinTemperatureSensor, INPUT);
+  pinMode(pinTemperatureSensor, INPUT);
   pinMode(pinBluetoothBtn, INPUT);
   pinMode(pinBluetooth, OUTPUT);
   pinMode(pinEspSwitch, OUTPUT);
   digitalWrite(pinEspSwitch, HIGH);
 
   Serial.println("Connect to esp:");
-  waitForEspCommand(0x01);
-  sendCommandToEsp(0x03);
+  espConnection.waitForEspCommand(0x01);
+  espConnection.sendCommandToEsp(0x03);
   Serial.println("Connected");
-  delay(100);
-  digitalWrite(pinEspSwitch, LOW);
-
-  readSensors();
   
   //Reset data arrays
   memset(msg, 0, sizeof(msg));
   memset(sensorValue, 0, sizeof(sensorValue));
   memset(settingsMessage, 0, sizeof(settingsMessage));
-
-  digitalWrite(pinAirQTrans, LOW);
-  dustSensor.sensorSleep();
-  delay(100); 
+  
+  espConnection.turnOff();
+  turnOffSensors();
 }
 
 void loop() { 
@@ -108,39 +104,13 @@ void loop() {
   
   //Bluetooth mode--------------------------------
   if(bluetoothON){
-    if(bluetoothSerial.available() > 0){      
-      short msgCounter = 0;
-      short seperatorCount = 0;
-
-      while(bluetoothSerial.available() > 0){
-        char letter = bluetoothSerial.read();
-        if(letter == '&'){
-          seperatorCount++;
-        }
-        if(seperatorCount != 2){
-          settingsMessage[msgCounter] = letter;
-          msgCounter++;
-        } 
-        else {
-          char index_char[1]; index_char[0] = bluetoothSerial.read();
-          Serial.println(index_char);
-          int index = atoi(index_char);
-          byte b = (byte)index; //saving index to byte value for EEPROM
-          EEPROM.write(0, b);
-          sensorsReadDelay = timeInterval[index] * 60;
-          Serial.println(sensorsReadDelay);
-          //memset(settingsMessage, 0, sizeof(settingsMessage));
-        }       
-        
+  
+    readSettingsChange();
+    
+    if(checkTime(turnOnDelay)){
+        turnOnSensors();
       }
-    }
-    
-    
-    
-    if((loopCount * loopDelay)/1000 > turnOnDelay){
-      digitalWrite(pinAirQTrans, HIGH);     
-    }
-    if((loopCount * loopDelay)/1000 > sensorsReadDelay){
+    if(checkTime(sensorsReadDelay)){
     
       readSensors();    
 
@@ -152,87 +122,59 @@ void loop() {
   
       memset(msg, 0, sizeof(msg));
       loopCount = 0;
-      digitalWrite(pinAirQTrans, LOW);
+      turnOffSensors();
       } else {
         loopCount++;
       }
   } else { //WiFi mode--------------------------------
 
-      if((loopCount * loopDelay)/1000 > turnOnDelay){
-      digitalWrite(pinAirQTrans, HIGH);     
+      if(checkTime(turnOnDelay)){
+           turnOnSensors();
       }
-      if((loopCount * loopDelay)/1000 > sensorsReadDelay){
+      if(checkTime(sensorsReadDelay)){
         
         readSensors();
-        digitalWrite(pinAirQTrans, LOW);
+        turnOffSensors();
 
-        digitalWrite(pinEspSwitch, HIGH);
-        Serial.println("Wait for 0x01:"); 
-        waitForEspCommand(0x01);
-
-        delay(100);
-        sendCommandToEsp(0x02);
-        delay(1000);
-        sendMessageToEsp(msg);
-
-        Serial.println("Wait for msg send:"); 
-        waitForEspCommand(0x09);        
-        Serial.println("Done"); 
-        delay(3000);
+        espConnection.turnOn();
         
-        digitalWrite(pinEspSwitch, LOW);
-        delay(5000);
+        Serial.println("Wait for 0x01"); 
+        espConnection.waitForEspCommand(0x01);
+        espConnection.sendCommandToEsp(0x02);
+        espConnection.sendMessageToEsp(msg);
+        
+        Serial.println("Wait for msg send"); 
+        espConnection.waitForEspCommand(0x09);        
+        Serial.println("Done"); 
+        
+        espConnection.turnOff();
+        
         loopCount = 0;  
       }else {
         loopCount++;
-      }    
-      
-  
-                
+      }                
     }   
         
-  delay(loopDelay);
-    
+  delay(loopDelay);    
 }
 
 //Functions**************************************************************************************************************************
 
-  void waitForEspCommand(byte command){  
-    bool waiting = true;
-    int o = 0;
-    while(waiting){
-      byte cmd = readEspCommand();
-      if(cmd == command){
-        waiting = false;
-        Serial.println(cmd, HEX);
-        double wynik = (o * 10) / 1000;
-        Serial.println(o);
-      }
-      o++;
-      delay(10);
+  void turnOffSensors(){
+    dustSensor.sensorSleep();
+    digitalWrite(pinAirQTrans, LOW); 
+  }
+  void turnOnSensors(){
+    dustSensor.sensorWakeup();
+    digitalWrite(pinAirQTrans, HIGH); 
+  }
+  bool checkTime(short delayTime){
+    if((loopCount * loopDelay)/1000 > delayTime){
+      return true;
+    } 
+    else {
+      return false;
     }
-  }
-  void sendCommandToEsp(byte command){    
-    espSerial.write(command);
-    espSerial.flush();    //delay niepotrzebny  
-  }
-  void sendMessageToEsp(char * message){    
-    strcat(message, "$");
-    espSerial.print(message);
-    espSerial.flush();
-    memset(message, 0, sizeof(message)); 
-  }
-
-  byte readEspCommand(){
-    espSerial.listen();
-    byte command;
-    if(espSerial.available() > 0){
-      command = espSerial.read();
-      //espSerial.flush();      
-    } else {
-      command = 0x00;        
-    }
-    return command;
   }
   //-------------------------------------------------------
   //Reading sensors values
@@ -248,13 +190,10 @@ void loop() {
       saveValue(airq, airquality);      
 
       dustSerial.listen();
-      delay(100);
-      dustSensor.sensorWakeup();
-      delay(3000);
+      delay(1000);
       dustSensor.sensorRead();        
       saveValue(dust, dustSensor.getPm25()); 
       saveValue(dust10, dustSensor.getPm10());
-      dustSensor.sensorSleep();
 
       float battery_sensor = 0;
       float sum = 0;
@@ -307,4 +246,32 @@ void loop() {
         bluetoothON = false;
       }    
     }
+  }
+  void readSettingsChange(){
+        if(bluetoothSerial.available() > 0){      
+      short msgCounter = 0;
+      short seperatorCount = 0;
+
+      while(bluetoothSerial.available() > 0){
+        char letter = bluetoothSerial.read();
+        if(letter == '&'){
+          seperatorCount++;
+        }
+        if(seperatorCount != 2){
+          settingsMessage[msgCounter] = letter;
+          msgCounter++;
+        } 
+        else {
+          char index_char[1]; index_char[0] = bluetoothSerial.read();
+          Serial.println(index_char);
+          int index = atoi(index_char);
+          byte b = (byte)index; //saving index to byte value for EEPROM
+          EEPROM.write(0, b);
+          sensorsReadDelay = timeInterval[index] * 60;
+          Serial.println(sensorsReadDelay);
+          //memset(settingsMessage, 0, sizeof(settingsMessage));
+        }       
+        
+      }
+    } 
   }
