@@ -9,12 +9,15 @@ class DustSensor{
     SoftwareSerial * dustSerial;
     double Pm25 = 0;
     double Pm10 = 1;
+    void writeToSensor(const byte * cmd);
     
   public:
     DustSensor(SoftwareSerial * serial);
     ~DustSensor();
     void setupSensor();
-    void start();
+    void sensorRead();
+    void sensorSleep();
+    void sensorWakeup();
     double getPm25();
     double getPm10();
 };

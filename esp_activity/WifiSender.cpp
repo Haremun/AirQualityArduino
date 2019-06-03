@@ -13,8 +13,8 @@ void WifiSender::sendDataToServer(WiFiClient wifiClient, String data){
     int i = http.POST(data);
     Serial.flush();
     Serial.begin(9600);
-    delay(1000);    
-    Serial.print("HTTP Code: "); Serial.println(i);
-    Serial.println(http.getString());
+    //delay(1000);    
+    //Serial.print("HTTP Code: "); Serial.println(i);
+    //Serial.println(http.getString());
     http.end();
   }
